@@ -7,6 +7,56 @@ on:
     branches: [ main, master ]
 
 jobs:
+
+  devsecops-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # 🛡️ PILLAR 1: CHECKSTYLE (Code Quality)
+      # Scans for messy code, bad naming, and formatting issues.
+      - name: Run Checkstyle
+        run: mvn checkstyle:check --no-transfer-progress
+        continue-on-error: true # Don't stop the build if code is just "messy"
+
+      # 🛡️ PILLAR 2: JACOCO (Test Coverage)
+      # Measures how much of your code is actually tested.
+      # Note: This runs your unit tests automatically.
+      - name: Run JaCoCo Coverage
+        run: mvn test jacoco:report --no-transfer-progress
+
+      # 🛡️ PILLAR 3: OWASP DEPENDENCY CHECK (SCA)
+      # Scans your libraries (dependencies) for known security vulnerabilities.
+      - name: Run OWASP Dependency Scan
+        run: mvn dependency-check:check -DfailOnError=false --no-transfer-progress
+
+      # 🛡️ PILLAR 4: CYCLONEDX (SBOM)
+      # Generates a Software Bill of Materials (Digital Receipt).
+      - name: Generate CycloneDX SBOM
+        run: mvn cyclonedx:makeBom --no-transfer-progress
+
+      # 🚀 ARTIFACT UPLOAD: Downloadable Reports
+      # This step collects all 4 reports into one ZIP file.
+      - name: Upload Audit Reports
+        if: always() # Ensure reports are uploaded even if a check fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: devsecops-audit-reports
+          path: |
+            target/checkstyle-result.xml
+            target/site/jacoco/
+            target/dependency-check-report.html
+            target/bom.json
+
+
   # JOB 1: SECRETS SCANNING
   # This ensures you haven't accidentally pushed passwords or keys
   secrets-scan:
